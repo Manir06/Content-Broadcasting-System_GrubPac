@@ -1,0 +1,487 @@
+================================================================================
+  EDUCAST — CONTENT BROADCASTING SYSTEM
+  Frontend Technical Documentation
+  File: Frontend-notes.txt
+  Last Updated: May 2026
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+TABLE OF CONTENTS
+────────────────────────────────────────────────────────────────────────────────
+
+  1. Project Overview
+  2. Tech Stack
+  3. Project Structure
+  4. Authentication Flow
+  5. Role-Based Routing
+  6. API Integration Approach
+  7. State Management Approach
+  8. Component Architecture
+  9. Key Design Decisions & Assumptions
+  10. Known Limitations & Future Improvements
+
+────────────────────────────────────────────────────────────────────────────────
+1. PROJECT OVERVIEW
+────────────────────────────────────────────────────────────────────────────────
+
+EduCast is a frontend-only Content Broadcasting System built for educational
+institutions. It allows teachers to upload scheduled visual content (images),
+which principals review and approve before broadcasting to students via a
+public, unauthenticated live page.
+
+The system supports three distinct user roles:
+
+  • Teacher     — Uploads content, tracks status of submissions
+  • Principal   — Reviews, approves, or rejects teacher submissions
+  • Public      — Students/viewers access the live broadcast page without login
+
+There is no real backend. All data operations are simulated using mock services
+with artificial delays to replicate realistic API latency.
+
+────────────────────────────────────────────────────────────────────────────────
+2. TECH STACK
+────────────────────────────────────────────────────────────────────────────────
+
+  Framework           React 19 (via Vite 8)
+  Language            JavaScript ES2022+ (no TypeScript)
+  Styling             Tailwind CSS v4 (Vite plugin, no PostCSS config needed)
+  Routing             React Router DOM v7
+  Server State        TanStack Query (React Query) v5
+  Forms               React Hook Form v7 + Zod v4 (via @hookform/resolvers v5)
+  HTTP Client         Axios v1 (with interceptors; currently calls mock services)
+  Notifications       Sonner v2 (toast system)
+  Icons               Lucide React v1
+  Date Utilities      date-fns v4
+  Class Utilities     clsx + tailwind-merge (via cn() helper)
+
+────────────────────────────────────────────────────────────────────────────────
+3. PROJECT STRUCTURE
+────────────────────────────────────────────────────────────────────────────────
+
+src/
+│
+├── api/
+│   └── axios.js                 Axios instance with request/response interceptors.
+│                                Reads auth token from sessionStorage and attaches
+│                                it as a Bearer header on every request.
+│                                Handles global 401 redirect to /login.
+│
+├── services/                    All business logic and data access lives here.
+│   │                            Components NEVER call APIs directly.
+│   │
+│   ├── auth.service.js          login(), logout(), getCurrentUser(), isAuthenticated()
+│   │                            Uses sessionStorage (tab-isolated) for session data.
+│   │
+│   ├── content.service.js       getTeacherContent(), uploadContent(), getAllContent(),
+│   │                            getLiveContent(), getPrincipalStats(), getRecentUploads(),
+│   │                            approveContentById(), rejectContentById()
+│   │                            Persists the content store in localStorage so all
+│   │                            browser tabs share the same data in real time.
+│   │
+│   └── approval.service.js      getPendingContent(), approveContent(), rejectContent()
+│                                Thin delegation layer — delegates mutations to
+│                                contentService to ensure single source of truth.
+│
+├── context/
+│   └── AuthContext.jsx          React Context that wraps the entire app.
+│                                Exposes: user, isAuthenticated, isLoading, login, logout
+│                                Restores session on mount from sessionStorage.
+│
+├── hooks/
+│   ├── useAuth.js               Consumes AuthContext. Throws if used outside provider.
+│   └── useDebounce.js           Generic debounce hook used for search inputs (400ms).
+│
+├── mock/
+│   └── mockData.js              Static seed data: 200+ content items, 2 users,
+│                                3 guaranteed always-live pinned items, pre-computed stats.
+│                                Used as the initial state for contentStore in
+│                                content.service.js on first load.
+│
+├── utils/
+│   ├── constants.js             ROLES, CONTENT_STATUS enum, SUBJECTS list, ROUTES,
+│   │                            QUERY_KEYS, PAGINATION sizes, POLLING_INTERVAL.
+│   ├── helpers.js               cn(), getSubjectLabel(), truncate(), getInitials(),
+│   │                            formatFileSize(), getRuntimeStatus(), isContentActive()
+│   └── formatDate.js            formatDate(), formatDateTime(), formatRelativeTime(),
+│                                toInputDateTime() — all backed by date-fns.
+│
+├── layouts/
+│   ├── DashboardLayout.jsx      Shell for authenticated pages: Sidebar + Navbar + <Outlet>
+│   │                            Owns sidebar open/close state and dark/light theme toggle.
+│   └── AuthLayout.jsx           Split-screen layout: branded left panel + form on right.
+│
+├── routes/
+│   ├── ProtectedRoute.jsx       Redirects unauthenticated users to /login.
+│   │                            Shows PageLoader while auth state is being restored.
+│   └── RoleRoute.jsx            Checks user.role against allowedRole prop.
+│                                Wrong role → redirected to their correct dashboard.
+│
+├── pages/
+│   ├── auth/
+│   │   └── Login.jsx            Email + password form. Zod validation.
+│   │                            Demo credential chips for quick fill.
+│   │                            Redirects to role-specific dashboard on success.
+│   │
+│   ├── teacher/
+│   │   ├── TeacherDashboard.jsx Stats cards + recent uploads table + live page banner.
+│   │   ├── UploadContent.jsx    Multi-section form with file upload, schedule, validation.
+│   │   └── MyContent.jsx        Grid/table toggle, debounced search, status filter tabs.
+│   │
+│   ├── principal/
+│   │   ├── PrincipalDashboard.jsx  Stats + recent submissions + live preview banner.
+│   │   ├── PendingApprovals.jsx    Card grid with Approve/Reject per item.
+│   │   │                           Reject opens a modal requiring a typed reason.
+│   │   └── AllContent.jsx          Server-side paginated table with debounced search
+│   │                               and status filter. Uses placeholderData for smooth UX.
+│   │
+│   └── public/
+│       └── LiveContent.jsx      No auth required. Polls every 10s. Reads from
+│                                localStorage-backed service so approvals appear
+│                                within seconds of principal action.
+│
+├── components/
+│   ├── common/
+│   │   ├── Loader.jsx           Spinner, PageLoader, SkeletonCard, SkeletonTable,
+│   │   │                        SkeletonStatCard — used for every async state.
+│   │   ├── EmptyState.jsx       Icon + title + description + optional action slot.
+│   │   │                        Accepts string key ('empty'|'search'|'error') or
+│   │   │                        any Lucide icon component directly.
+│   │   ├── ErrorState.jsx       Destructive-styled error box with optional retry callback.
+│   │   ├── Navbar.jsx           Sticky top bar: mobile menu toggle, theme switcher,
+│   │   │                        notification bell, profile dropdown with logout.
+│   │   ├── Sidebar.jsx          Role-aware navigation links, Live Broadcast button
+│   │   │                        (opens /live/:teacherId in new tab), logout.
+│   │   │                        Slides in on mobile with backdrop overlay.
+│   │   └── StatusBadge.jsx      Maps CONTENT_STATUS enum values to styled pill badges
+│   │                            with animated dots. Memoized.
+│   │
+│   ├── dashboard/
+│   │   └── StatsCard.jsx        Reusable KPI card with icon, value, trend, description.
+│   │                            Has its own skeleton loading state. Memoized.
+│   │
+│   ├── forms/
+│   │   └── FileUpload.jsx       Drag-and-drop + click upload zone. Validates type (JPG,
+│   │                            PNG, GIF) and size (max 10 MB). Shows image preview.
+│   │                            Revokes blob URLs on remove to prevent memory leaks.
+│   │
+│   └── content/
+│       ├── ContentCard.jsx      Image thumbnail, runtime status badge, scheduling info,
+│       │                        rejection reason display, action slot. Memoized.
+│       ├── ContentTable.jsx     Responsive table with image thumbnails, inline pagination,
+│       │                        runtime status, optional teacher column. Memoized.
+│       └── ApprovalModal.jsx    Generic reusable modal: ESC key close, body scroll lock,
+│                                overlay click dismiss, size variants (sm/md/lg/xl).
+│
+├── App.jsx                      Root router tree. All pages are lazy-loaded via
+│                                React.lazy() + Suspense for code splitting.
+│                                Wraps everything in QueryClientProvider + AuthProvider.
+│
+└── main.jsx                     Entry point. Runs a one-time localStorage migration
+                                 check to clear old unversioned store format.
+
+────────────────────────────────────────────────────────────────────────────────
+4. AUTHENTICATION FLOW
+────────────────────────────────────────────────────────────────────────────────
+
+STORAGE STRATEGY
+  Auth credentials are stored in sessionStorage (NOT localStorage).
+  sessionStorage is scoped per browser tab, so:
+    • Teacher in Tab 1, Principal in Tab 2 → reload either tab → stays correct.
+    • Closing a tab clears that session automatically.
+    • Opening a new tab has no session → redirected to /login.
+
+  Content data (uploads, approvals) intentionally uses localStorage so mutations
+  are shared across all tabs in real time (cross-tab broadcasting behaviour).
+
+LOGIN FLOW
+  ┌─────────┐   email+password    ┌──────────────────┐
+  │  Login  │ ─────────────────► │  authService      │
+  │  .jsx   │                    │  .login()          │
+  └─────────┘                    └────────┬─────────┘
+                                          │ match found in mockUsers
+                                          ▼
+                                  generate mock JWT token
+                                  sessionStorage.setItem('auth_token', token)
+                                  sessionStorage.setItem('auth_user', JSON.stringify(user))
+                                          │
+                                          ▼
+                                  AuthContext.setUser(user)
+                                          │
+                                          ▼
+                             role === 'teacher' → /teacher/dashboard
+                             role === 'principal' → /principal/dashboard
+
+SESSION RESTORATION (on page reload)
+  AuthContext runs useEffect on mount:
+    1. authService.getCurrentUser() → reads sessionStorage
+    2. authService.isAuthenticated() → checks token + user both exist
+    3. If valid → setUser(currentUser), setIsLoading(false)
+    4. If invalid → setIsLoading(false) (user stays null → ProtectedRoute redirects)
+
+LOGOUT FLOW
+  logout() called from Navbar or Sidebar:
+    1. authService.logout() → sessionStorage.removeItem() for both keys
+    2. AuthContext.setUser(null)
+    3. navigate('/login')
+    Result: Only the current tab is logged out. Other tabs unaffected.
+
+DEMO CREDENTIALS
+  Teacher   →  teacher@example.com   /  password123
+  Principal →  principal@example.com /  password123
+
+TOKEN ATTACHMENT
+  Every Axios request reads sessionStorage.getItem('auth_token') and attaches it
+  as Authorization: Bearer <token>. On a 401 response, the interceptor clears
+  the session and redirects to /login.
+
+────────────────────────────────────────────────────────────────────────────────
+5. ROLE-BASED ROUTING
+────────────────────────────────────────────────────────────────────────────────
+
+ROUTE TREE (App.jsx)
+  /live/:teacherId          Public — no auth, no wrapper
+  /login                    AuthLayout (split-screen)
+  /                         → redirects to /login
+
+  Protected (ProtectedRoute):
+    └── DashboardLayout (Sidebar + Navbar)
+        ├── RoleRoute allowedRole="teacher"
+        │   ├── /teacher/dashboard
+        │   ├── /teacher/upload
+        │   └── /teacher/my-content
+        │
+        └── RoleRoute allowedRole="principal"
+            ├── /principal/dashboard
+            ├── /principal/approvals
+            └── /principal/all-content
+
+ProtectedRoute behaviour:
+  • isLoading = true  → shows <PageLoader /> (prevents flash of redirect)
+  • isAuthenticated = false → <Navigate to="/login" replace />
+  • isAuthenticated = true  → renders <Outlet />
+
+RoleRoute behaviour:
+  • user.role !== allowedRole:
+      teacher   trying principal routes → /teacher/dashboard
+      principal trying teacher routes  → /principal/dashboard
+      unknown role                     → /login
+  • user.role === allowedRole → renders <Outlet />
+
+SIDEBAR NAVIGATION (auto-filtered by role)
+  Teacher sees:    Dashboard | Upload Content | My Content
+  Principal sees:  Dashboard | Pending Approvals | All Content
+  Both see:        Live Broadcast (opens public /live page in new tab)
+
+────────────────────────────────────────────────────────────────────────────────
+6. API INTEGRATION APPROACH
+────────────────────────────────────────────────────────────────────────────────
+
+ARCHITECTURE RULE: Components never call data sources directly.
+  Component → TanStack Query (useQuery/useMutation) → Service → (mock) Store
+
+MOCK API PATTERN
+  All service methods return Promises with artificial setTimeout delays to
+  simulate realistic network latency:
+
+    const delay = (ms = 800) => new Promise(resolve => setTimeout(resolve, ms))
+
+    async getTeacherContent(teacherId) {
+      await delay()          // simulates ~800ms network round trip
+      contentStore = loadStore()
+      return contentStore.filter(c => c.teacherId === teacherId)
+    }
+
+DATA PERSISTENCE (contentStore)
+  The shared data store is maintained in two places simultaneously:
+
+    1. In-memory:   let contentStore = []   (fast reads within a tab)
+    2. localStorage: key = 'educast_content_store', value = { version, data }
+
+  On every READ:  contentStore = loadStore() pulls fresh data from localStorage.
+  On every WRITE: saveStore(contentStore) persists the updated array.
+  Cross-tab sync: window.addEventListener('storage', ...) fires when another tab
+                  writes to localStorage, updating the in-memory copy.
+
+  This ensures: approve in tab A → live page in tab B sees it within 10 seconds.
+
+UPLOAD FILE HANDLING
+  Blob URLs (from URL.createObjectURL) only work in the tab that created them.
+  When a teacher uploads a file:
+    • The blob URL is shown as preview in the upload form (same tab, works fine).
+    • Before saving to the store, blob: URLs are replaced with a randomly chosen
+      persistent Unsplash image URL so the image works in any tab/page.
+
+AXIOS SETUP (api/axios.js)
+  Base URL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
+  Note: Currently all service calls are mock — Axios is not used for actual HTTP.
+  It is pre-configured and ready for real backend integration:
+    • Request interceptor: injects Authorization: Bearer <token>
+    • Response interceptor: handles 401 → clears session → redirect /login
+    • Timeout: 10,000ms
+
+TANSTACK QUERY CONFIGURATION (App.jsx)
+  retry: 1            — retries failed queries once before showing error
+  staleTime: 60_000   — cached data considered fresh for 1 minute
+  refetchOnWindowFocus: false  — prevents unexpected refetches
+
+  Live page overrides:
+    staleTime: 0       — always considered stale, re-fetches every render
+    gcTime: 0          — no cache kept between mounts
+    refetchInterval: 10_000  — polls every 10 seconds
+
+────────────────────────────────────────────────────────────────────────────────
+7. STATE MANAGEMENT APPROACH
+────────────────────────────────────────────────────────────────────────────────
+
+The app deliberately uses different tools for different types of state:
+
+┌─────────────────────────┬────────────────────────────┬────────────────────────┐
+│  State Type             │  Tool Used                 │  Why                   │
+├─────────────────────────┼────────────────────────────┼────────────────────────┤
+│  Auth (user, token)     │  Context API + sessionStorage│ Global, tab-isolated  │
+│  Server / async data    │  TanStack Query            │  Caching, refetch,     │
+│  (content, stats, etc.) │  useQuery / useMutation    │  loading/error states  │
+│  Form state             │  React Hook Form           │  Uncontrolled, fast    │
+│  Local UI state         │  useState (per component)  │  Filter, page, search  │
+│  Persistent store       │  localStorage              │  Cross-tab content data│
+└─────────────────────────┴────────────────────────────┴────────────────────────┘
+
+CONTEXT API — Used only for auth (global concern, rarely changes)
+  AuthContext provides: { user, isAuthenticated, isLoading, login, logout }
+  The value is memoized with useMemo() to prevent unnecessary re-renders.
+  login and logout are wrapped in useCallback() for stable references.
+
+TANSTACK QUERY — Used for all async data
+  Every page that fetches data uses useQuery with a structured queryKey:
+    [QUERY_KEYS.TEACHER_CONTENT, user.id]
+    [QUERY_KEYS.ALL_CONTENT, statusFilter, search, page]
+
+  Query keys are centralized in src/utils/constants.js (QUERY_KEYS object).
+  After mutations (upload, approve, reject), queryClient.invalidateQueries()
+  is called with the relevant keys to trigger automatic background refetch.
+
+REACT HOOK FORM — Used for Login and UploadContent forms
+  Forms are uncontrolled (refs, not state) for performance.
+  Zod schemas define validation rules. zodResolver bridges Zod ↔ RHF.
+  File input is managed separately with useState since it's not a native
+  HTML form value (Zod validates at submit time via manual check).
+
+LOCAL UI STATE (useState)
+  Each page owns its own ephemeral state:
+    • MyContent.jsx:     view ('grid'|'table'), statusFilter, search
+    • AllContent.jsx:    statusFilter, search, page
+    • PendingApprovals:  rejectTarget (selected item), rejectReason, reasonError
+    • Sidebar.jsx:       managed by DashboardLayout (sidebarOpen)
+    • Navbar.jsx:        isProfileOpen (dropdown visibility)
+
+NO PROP DRILLING
+  • Auth state → useAuth() hook (Context, no drilling)
+  • Shared constants → imported directly from utils/constants.js
+  • Query data → each page fetches its own (no passing data between pages)
+
+────────────────────────────────────────────────────────────────────────────────
+8. COMPONENT ARCHITECTURE
+────────────────────────────────────────────────────────────────────────────────
+
+REUSABILITY PRINCIPLES
+  • Every component accepts a className prop for layout override
+  • Action slots (render props pattern) used for buttons in EmptyState, ContentCard
+  • Icon prop accepts either a string key or a direct Lucide component reference
+  • All table/card list components accept an `actions` prop (value or function)
+
+MEMOIZATION STRATEGY
+  React.memo() is applied to components that:
+    • Receive stable props but live inside frequently-updating parents
+    • Are rendered in lists (ContentCard, StatusBadge, StatsCard, ContentTable)
+
+  useMemo() used for:
+    • Filtered/sorted arrays in MyContent.jsx (filtered from content + search + status)
+    • AuthContext value object (prevents all consumers re-rendering on unrelated state)
+
+  useCallback() used for:
+    • Event handlers passed to child components (handleFileChange, handleApprove, etc.)
+    • login() and logout() in AuthContext
+
+LAZY LOADING
+  All page components are loaded lazily:
+    const Login = lazy(() => import('./pages/auth/Login'))
+    const TeacherDashboard = lazy(() => import('./pages/teacher/TeacherDashboard'))
+    ...etc
+
+  This splits the bundle so the initial JS load only includes the shell.
+  <Suspense fallback={<PageLoader />}> wraps all routes.
+
+LOADING / ERROR / EMPTY STATES
+  Every async operation renders all three states:
+
+    {error    ? <ErrorState message={...} onRetry={refetch} />
+   : isLoading ? <SkeletonCard /> (or <SkeletonTable />)
+   : !data?.length ? <EmptyState title={...} action={...} />
+   : <ActualContent />}
+
+────────────────────────────────────────────────────────────────────────────────
+9. KEY DESIGN DECISIONS & ASSUMPTIONS
+────────────────────────────────────────────────────────────────────────────────
+
+ASSUMPTION 1 — Single teacher's live page
+  The live page URL is /live/:teacherId. In the current mock, all teacher-uploaded
+  content uses teacherId = 'teacher-001' (Sarah Johnson). A real backend would
+  support any teacherId. The principal's "Preview Live Page" button links to
+  teacher-001 as a representative example.
+
+ASSUMPTION 2 — Content "active" = approved + within time window
+  A content item shows on the live page only when ALL of:
+    (a) status === 'approved'
+    (b) current time >= startTime
+    (c) current time <= endTime
+  This is computed in getRuntimeStatus() (helpers.js) and getLiveContent() (service).
+  The displayed badge reflects the runtime status, not just the DB status:
+    approved + future startTime → "Scheduled"
+    approved + now in window   → "Active"
+    approved + past endTime    → "Expired"
+
+ASSUMPTION 3 — File uploads are mock
+  There is no real file server. Uploaded files are shown as a preview in the
+  same tab using a blob: URL (via URL.createObjectURL). When saved to the store,
+  the blob: URL is replaced with a random Unsplash image URL so the content
+  renders correctly in the live page (different tab) and after page reloads.
+
+ASSUMPTION 4 — One session per tab
+  sessionStorage is used for auth (not localStorage) so multiple roles can be
+  tested simultaneously in different browser tabs. This is intentional for
+  demonstration purposes. A production app would enforce a single session.
+
+ASSUMPTION 5 — No real backend or network
+  Axios is fully configured and ready for a real API. The baseURL reads from
+  VITE_API_URL environment variable. To connect a real backend:
+    1. Set VITE_API_URL in a .env file
+    2. Replace service method bodies with apiClient.get/post/put/delete calls
+    3. Remove mock delays and mockData imports
+  No other changes to components, hooks, or routing are needed.
+
+ASSUMPTION 6 — Principal approves institution-wide content
+  The principal sees ALL content from ALL teachers. In the current mock, only
+  one real teacher account exists (teacher-001). Other teacher names in the
+  content list are generated as display names on mock items only.
+
+ASSUMPTION 7 — Pagination is server-side (simulated)
+  getAllContent() in content.service.js performs filtering, sorting, and slicing
+  on every call to simulate server-side pagination. The UI sends { page, pageSize,
+  status, search } parameters. This pattern is directly replaceable with a real
+  paginated API endpoint with no changes to the calling component.
+
+DESIGN DECISION — CSS Architecture (Tailwind v4 + Custom Utilities)
+  Tailwind v4 uses @import "tailwindcss" and an @theme block instead of a
+  tailwind.config.js. Reusable design tokens are defined as CSS custom properties
+  (HSL-based) in :root. Shared UI patterns (glass, sidebar-item, btn-primary, etc.)
+  are defined as plain CSS utility classes in index.css — this keeps JSX clean
+  and avoids repetitive className strings across components.
+
+DESIGN DECISION — Dark mode as default
+  The app defaults to dark mode (no .light class on <html>). The Navbar's theme
+  toggle adds/removes the .light class on document.documentElement. CSS custom
+  properties in .light override the default dark values. Theme state lives in
+  DashboardLayout (local useState) — it is intentionally not persisted because
+  the public live page and auth pages have their own independent styling.
+
+
