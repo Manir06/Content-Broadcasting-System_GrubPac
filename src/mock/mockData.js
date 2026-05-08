@@ -105,7 +105,7 @@ function generateContentItem(index, teacherId = 'teacher-001') {
   }
 }
 
-// Guaranteed always-live items so /live always shows content
+
 const now = Date.now()
 export const guaranteedLiveItems = [
   {
@@ -158,8 +158,8 @@ export const guaranteedLiveItems = [
     teacherName: 'Sarah Johnson',
     status: 'approved',
     rejectionReason: null,
-    startTime: new Date(now - 30 * 60 * 1000).toISOString(),       // started 30 min ago
-    endTime: new Date(now + 4 * 60 * 60 * 1000).toISOString(),     // ends in 4h
+    startTime: new Date(now - 30 * 60 * 1000).toISOString(),       
+    endTime: new Date(now + 4 * 60 * 60 * 1000).toISOString(),    
     rotationDuration: 10,
     uploadedAt: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
     approvedAt: new Date(now - 1 * 24 * 60 * 60 * 1000).toISOString(),
@@ -167,13 +167,13 @@ export const guaranteedLiveItems = [
   },
 ]
 
-// Generate 50 content items for the teacher
+
 export const mockTeacherContent = [
   ...guaranteedLiveItems,
   ...Array.from({ length: 47 }, (_, i) => generateContentItem(i, 'teacher-001')),
 ]
 
-// Generate 200 total content items for admin view
+
 export const mockAllContent = [
   ...mockTeacherContent,
   ...Array.from({ length: 150 }, (_, i) => {
