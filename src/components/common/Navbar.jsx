@@ -18,7 +18,7 @@ export const Navbar = memo(function Navbar({ onMenuToggle, isDark, onThemeToggle
 
   return (
     <header className="sticky top-0 z-40 glass-strong border-b border-border/50 h-16 flex items-center px-4 gap-4">
-      {/* Mobile Menu Toggle */}
+  
       <button
         onClick={onMenuToggle}
         className="lg:hidden text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-secondary"
@@ -29,7 +29,7 @@ export const Navbar = memo(function Navbar({ onMenuToggle, isDark, onThemeToggle
         <Menu className="h-5 w-5" />
       </button>
 
-      {/* Brand */}
+      
       <Link to="/" className="flex items-center gap-2 font-bold text-lg text-foreground mr-auto lg:hidden">
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
           <Zap className="h-4 w-4 text-primary-foreground" />
@@ -38,7 +38,7 @@ export const Navbar = memo(function Navbar({ onMenuToggle, isDark, onThemeToggle
       </Link>
 
       <div className="ml-auto flex items-center gap-2">
-        {/* Theme Toggle */}
+        
         <button
           onClick={onThemeToggle}
           className="text-muted-foreground hover:text-foreground transition-colors p-2 rounded-lg hover:bg-secondary"
@@ -49,7 +49,7 @@ export const Navbar = memo(function Navbar({ onMenuToggle, isDark, onThemeToggle
           {isDark ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
         </button>
 
-        {/* Notifications placeholder */}
+        
         <button
           className="relative text-muted-foreground hover:text-foreground transition-colors p-2 rounded-lg hover:bg-secondary"
           type="button"
@@ -60,7 +60,7 @@ export const Navbar = memo(function Navbar({ onMenuToggle, isDark, onThemeToggle
           <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-primary" />
         </button>
 
-        {/* Profile Dropdown */}
+      
         <div className="relative">
           <button
             onClick={() => setIsProfileOpen((v) => !v)}
