@@ -1,11 +1,7 @@
 import { Component } from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 
-/**
- * Class-based error boundary (React requires class components for this).
- * Catches any unexpected JS render error in its subtree and shows a
- * graceful fallback instead of a blank white page.
- */
+
 export class ErrorBoundary extends Component {
   constructor(props) {
     super(props)
@@ -17,7 +13,7 @@ export class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
-    // In production this would send to an error reporting service (Sentry etc.)
+    
     console.error('[ErrorBoundary] Uncaught error:', error, info.componentStack)
   }
 
@@ -53,7 +49,7 @@ export class ErrorBoundary extends Component {
             boxShadow: '0 25px 50px rgba(0,0,0,0.4)',
           }}
         >
-          {/* Icon */}
+         
           <div
             style={{
               display: 'inline-flex',
