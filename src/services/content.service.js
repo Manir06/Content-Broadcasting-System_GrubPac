@@ -4,7 +4,7 @@ import { generateId } from '../utils/helpers'
 const STORAGE_KEY = 'educast_content_store'
 const STORE_VERSION = 'v1'
 
-// Sample images used when a real file can't be persisted cross-tab
+
 const SAMPLE_IMAGES = [
   'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=600&q=80',
   'https://images.unsplash.com/photo-1587620962725-abab7fe55159?w=600&q=80',
@@ -20,7 +20,6 @@ function randomSampleImage() {
   return SAMPLE_IMAGES[Math.floor(Math.random() * SAMPLE_IMAGES.length)]
 }
 
-// ─── Persistence helpers ───────────────────────────────────────────────────
 
 function loadStore() {
   try {
@@ -32,9 +31,9 @@ function loadStore() {
       }
     }
   } catch {
-    // ignore parse errors — fall through to defaults
+    
   }
-  // First load: seed with mock data and persist it
+  
   const initial = [...mockAllContent]
   saveStore(initial)
   return initial
@@ -44,11 +43,10 @@ function saveStore(store) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: STORE_VERSION, data: store }))
   } catch {
-    // storage quota exceeded or unavailable — degrade silently
+    
   }
 }
 
-// ─── Shared in-memory + localStorage store ────────────────────────────────
 
 let contentStore = loadStore()
 
@@ -75,23 +73,19 @@ function patchItem(id, updates) {
   return contentStore[idx]
 }
 
-// ─── Service ──────────────────────────────────────────────────────────────
+
 
 export const contentService = {
-  /**
-   * Get content uploaded by a specific teacher
-   */
+
   async getTeacherContent(teacherId) {
     await delay()
-    contentStore = loadStore() // always read fresh from storage
+    contentStore = loadStore() 
     return contentStore
       .filter((c) => c.teacherId === teacherId)
       .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt))
   },
 
-  /**
-   * Get teacher stats
-   */
+ 
   async getTeacherStats(teacherId) {
     await delay(500)
     contentStore = loadStore()
@@ -104,11 +98,7 @@ export const contentService = {
     }
   },
 
-  /**
-   * Upload new content.
-   * Blob URLs (from URL.createObjectURL) are replaced with a persistent
-   * sample image so the URL works in any tab.
-   */
+
   async uploadContent(payload) {
     await delay(1500)
 
@@ -116,7 +106,7 @@ export const contentService = {
       throw new Error('Upload failed due to server error. Please try again.')
     }
 
-    // Blob URLs only live in the creating tab — swap for a persistent URL
+   
     const fileUrl =
       payload.fileUrl && !payload.fileUrl.startsWith('blob:')
         ? payload.fileUrl
@@ -138,9 +128,7 @@ export const contentService = {
     return newItem
   },
 
-  /**
-   * Approve a content item (used by approvalService).
-   */
+ 
   async approveContentById(contentId, approverName = 'Dr. Michael Chen') {
     await delay(700)
     contentStore = loadStore()
@@ -156,9 +144,7 @@ export const contentService = {
     return { ...updated }
   },
 
-  /**
-   * Reject a content item (used by approvalService).
-   */
+ 
   async rejectContentById(contentId, reason) {
     await delay(700)
     if (!reason?.trim()) throw new Error('Rejection reason is required.')
@@ -176,9 +162,7 @@ export const contentService = {
     return { ...updated }
   },
 
-  /**
-   * Get all content (for principal view) with optional filters + pagination.
-   */
+
   async getAllContent({ status, search, page = 1, pageSize = 10 } = {}) {
     await delay()
     contentStore = loadStore()
@@ -209,10 +193,7 @@ export const contentService = {
     return { data, total, page, pageSize, totalPages }
   },
 
-  /**
-   * Get currently live/active content for a teacher's public page.
-   * Always reads from localStorage so it reflects approvals from any tab.
-   */
+
   async getLiveContent(teacherId) {
     await delay(600)
     contentStore = loadStore() // always sync from storage
@@ -227,9 +208,7 @@ export const contentService = {
     })
   },
 
-  /**
-   * Get principal stats.
-   */
+
   async getPrincipalStats() {
     await delay(500)
     contentStore = loadStore()
@@ -241,9 +220,7 @@ export const contentService = {
     }
   },
 
-  /**
-   * Get recent uploads for the principal dashboard.
-   */
+
   async getRecentUploads(limit = 10) {
     await delay(600)
     contentStore = loadStore()
@@ -252,9 +229,7 @@ export const contentService = {
       .slice(0, limit)
   },
 
-  /**
-   * Utility: reset the store back to the initial mock state (dev/test helper).
-   */
+  
   resetStore() {
     localStorage.removeItem(STORAGE_KEY)
     contentStore = loadStore()
