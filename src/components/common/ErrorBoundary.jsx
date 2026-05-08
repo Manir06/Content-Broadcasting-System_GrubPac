@@ -19,7 +19,7 @@ export class ErrorBoundary extends Component {
 
   handleReset = () => {
     this.setState({ hasError: false, error: null })
-    // Also navigate home so the user isn't stuck on a broken route
+    
     window.location.href = '/'
   }
 
