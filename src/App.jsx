@@ -12,7 +12,7 @@ import { AuthLayout } from './layouts/AuthLayout'
 import { PageLoader } from './components/common/Loader'
 import { ROLES } from './utils/constants'
 
-// Lazy-loaded pages
+
 const Login = lazy(() => import('./pages/auth/Login'))
 const TeacherDashboard = lazy(() => import('./pages/teacher/TeacherDashboard'))
 const UploadContent = lazy(() => import('./pages/teacher/UploadContent'))
@@ -53,26 +53,26 @@ export default function App() {
 
             <Suspense fallback={<PageLoader />}>
               <Routes>
-                {/* Public: Live Content (no auth required) */}
+               
                 <Route path="/live/:teacherId" element={<LiveContent />} />
                 <Route path="/live" element={<LiveContent />} />
 
-                {/* Auth Layout */}
+            
                 <Route element={<AuthLayout />}>
                   <Route path="/login" element={<Login />} />
                 </Route>
 
-                {/* Protected Dashboard Routes */}
+                
                 <Route element={<ProtectedRoute />}>
                   <Route element={<DashboardLayout />}>
-                    {/* Teacher Routes */}
+                    
                     <Route element={<RoleRoute allowedRole={ROLES.TEACHER} />}>
                       <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
                       <Route path="/teacher/upload" element={<UploadContent />} />
                       <Route path="/teacher/my-content" element={<MyContent />} />
                     </Route>
 
-                    {/* Principal Routes */}
+                  
                     <Route element={<RoleRoute allowedRole={ROLES.PRINCIPAL} />}>
                       <Route path="/principal/dashboard" element={<PrincipalDashboard />} />
                       <Route path="/principal/approvals" element={<PendingApprovals />} />
@@ -81,7 +81,6 @@ export default function App() {
                   </Route>
                 </Route>
 
-                {/* Catch-all redirect */}
                 <Route path="/" element={<Navigate to="/login" replace />} />
                 <Route path="*" element={<Navigate to="/login" replace />} />
               </Routes>
